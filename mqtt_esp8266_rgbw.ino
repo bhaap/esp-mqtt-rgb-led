@@ -277,7 +277,7 @@ void reconnect() {
   }
 }
 
-void setColor(int inR, int inG, int inB) {
+void setColor(int inR, int inG, int inB, int inW) {
   analogWrite(redPin, inR);
   analogWrite(greenPin, inG);
   analogWrite(bluePin, inB);
@@ -315,7 +315,7 @@ void loop() {
         setColor(0, 0, 0, 0);
         // If you'd prefer the flashing to happen "on top of"
         // the current color, uncomment the next line.
-        // setColor(realRed, realGreen, realBlue);
+        // setColor(realRed, realGreen, realBlue, realWhite);
       }
     }
     else {
