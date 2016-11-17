@@ -15,6 +15,8 @@ const int redPin = 0;
 const int txPin = 1; // On-board blue LED
 const int greenPin = 2;
 const int bluePin = 3;
+const int whitePin = 4;
+
 
 const char* ssid = "{WIFI-SSID}";
 const char* password = "{WIFI-PASSWORD}";
@@ -23,7 +25,7 @@ const char* mqtt_server = "{MQTT-SERVER}";
 const char* mqtt_username = "{MQTT-USERNAME}";
 const char* mqtt_password = "{MQTT-PASSWORD}";
 
-const char* client_id = "ESPRGBLED"; // Must be unique on the MQTT network
+const char* client_id = "ESPRGBWLED"; // Must be unique on the MQTT network
 
 // Topics
 const char* light_state_topic = "home/rgb1";
@@ -38,12 +40,14 @@ const int BUFFER_SIZE = JSON_OBJECT_SIZE(10);
 byte red = 255;
 byte green = 255;
 byte blue = 255;
+byte white = 255;
 byte brightness = 255;
 
 // Real values to write to the LEDs (ex. including brightness and state)
 byte realRed = 0;
 byte realGreen = 0;
 byte realBlue = 0;
+byte realWhite= 0;
 
 bool stateOn = false;
 
@@ -53,8 +57,8 @@ unsigned long lastLoop = 0;
 int transitionTime = 0;
 bool inFade = false;
 int loopCount = 0;
-int stepR, stepG, stepB;
-int redVal, grnVal, bluVal;
+int stepR, stepG, stepB, stepW;
+int redVal, grnVal, bluVal, whtVal;
 
 // Globals for flash
 bool flash = false;
@@ -64,6 +68,7 @@ unsigned long flashStartTime = 0;
 byte flashRed = red;
 byte flashGreen = green;
 byte flashBlue = blue;
+byte flashWhite = white;
 byte flashBrightness = brightness;
 
 WiFiClient espClient;
@@ -73,6 +78,7 @@ void setup() {
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
+  pinMode(whitePin, OUTPUT);
 
   pinMode(txPin, OUTPUT);
   digitalWrite(txPin, HIGH); // Turn off the on-board LED
@@ -113,7 +119,8 @@ void setup_wifi() {
       "color": {
         "r": 255,
         "g": 100,
-        "b": 100
+        "b": 100,
+        "w": 0
       },
       "flash": 2,
       "transition": 5,
@@ -141,11 +148,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
     realRed = map(red, 0, 255, 0, brightness);
     realGreen = map(green, 0, 255, 0, brightness);
     realBlue = map(blue, 0, 255, 0, brightness);
+    realWhite = map(white, 0, 255, 0, brightness);
   }
   else {
     realRed = 0;
     realGreen = 0;
     realBlue = 0;
+    realWhite = 0;
   }
 
   startFade = true;
@@ -188,16 +197,19 @@ bool processJson(char* message) {
       flashRed = root["color"]["r"];
       flashGreen = root["color"]["g"];
       flashBlue = root["color"]["b"];
+      flashWhite = root["color"]["w"];
     }
     else {
       flashRed = red;
       flashGreen = green;
       flashBlue = blue;
+      flashWhite = white;
     }
 
     flashRed = map(flashRed, 0, 255, 0, flashBrightness);
     flashGreen = map(flashGreen, 0, 255, 0, flashBrightness);
     flashBlue = map(flashBlue, 0, 255, 0, flashBrightness);
+    flashWhite = map(flashWhite, 0, 255, 0, flashBrightness);
 
     flash = true;
     startFlash = true;
@@ -209,6 +221,7 @@ bool processJson(char* message) {
       red = root["color"]["r"];
       green = root["color"]["g"];
       blue = root["color"]["b"];
+      white = root["color"]["w"]
     }
 
     if (root.containsKey("brightness")) {
@@ -236,6 +249,7 @@ void sendState() {
   color["r"] = red;
   color["g"] = green;
   color["b"] = blue;
+  color["w"] = white;
 
   root["brightness"] = brightness;
 
@@ -267,6 +281,7 @@ void setColor(int inR, int inG, int inB) {
   analogWrite(redPin, inR);
   analogWrite(greenPin, inG);
   analogWrite(bluePin, inB);
+  analogWrite(whitePin, inW);
 
   Serial.println("Setting LEDs:");
   Serial.print("r: ");
@@ -275,6 +290,8 @@ void setColor(int inR, int inG, int inB) {
   Serial.print(inG);
   Serial.print(", b: ");
   Serial.println(inB);
+  Serial.println(", w: ")
+  Serial.println(inW);
 }
 
 void loop() {
@@ -292,10 +309,10 @@ void loop() {
 
     if ((millis() - flashStartTime) <= flashLength) {
       if ((millis() - flashStartTime) % 1000 <= 500) {
-        setColor(flashRed, flashGreen, flashBlue);
+        setColor(flashRed, flashGreen, flashBlue, flashWhite);
       }
       else {
-        setColor(0, 0, 0);
+        setColor(0, 0, 0, 0);
         // If you'd prefer the flashing to happen "on top of"
         // the current color, uncomment the next line.
         // setColor(realRed, realGreen, realBlue);
@@ -303,18 +320,19 @@ void loop() {
     }
     else {
       flash = false;
-      setColor(realRed, realGreen, realBlue);
+      setColor(realRed, realGreen, realBlue, realWhite);
     }
   }
 
   if (startFade) {
     // If we don't want to fade, skip it.
     if (transitionTime == 0) {
-      setColor(realRed, realGreen, realBlue);
+      setColor(realRed, realGreen, realBlue, realWhite);
 
       redVal = realRed;
       grnVal = realGreen;
       bluVal = realBlue;
+      whtVal = realWhite;
 
       startFade = false;
     }
@@ -323,6 +341,7 @@ void loop() {
       stepR = calculateStep(redVal, realRed);
       stepG = calculateStep(grnVal, realGreen);
       stepB = calculateStep(bluVal, realBlue);
+      stepW = calculateStep(whtVal, realWhite);
 
       inFade = true;
     }
@@ -334,12 +353,13 @@ void loop() {
     if (now - lastLoop > transitionTime) {
       if (loopCount <= 1020) {
         lastLoop = now;
-        
+
         redVal = calculateVal(stepR, redVal, loopCount);
         grnVal = calculateVal(stepG, grnVal, loopCount);
         bluVal = calculateVal(stepB, bluVal, loopCount);
-        
-        setColor(redVal, grnVal, bluVal); // Write current values to LED pins
+        whtVal = calculateVal(stepW, whtVal, loopCount);
+
+        setColor(redVal, grnVal, bluVal, whtVal); // Write current values to LED pins
 
         Serial.print("Loop count: ");
         Serial.println(loopCount);
@@ -354,45 +374,45 @@ void loop() {
 
 // From https://www.arduino.cc/en/Tutorial/ColorCrossfader
 /* BELOW THIS LINE IS THE MATH -- YOU SHOULDN'T NEED TO CHANGE THIS FOR THE BASICS
-* 
+*
 * The program works like this:
-* Imagine a crossfade that moves the red LED from 0-10, 
+* Imagine a crossfade that moves the red LED from 0-10,
 *   the green from 0-5, and the blue from 10 to 7, in
 *   ten steps.
-*   We'd want to count the 10 steps and increase or 
+*   We'd want to count the 10 steps and increase or
 *   decrease color values in evenly stepped increments.
 *   Imagine a + indicates raising a value by 1, and a -
 *   equals lowering it. Our 10 step fade would look like:
-* 
+*
 *   1 2 3 4 5 6 7 8 9 10
 * R + + + + + + + + + +
 * G   +   +   +   +   +
 * B     -     -     -
-* 
-* The red rises from 0 to 10 in ten steps, the green from 
+*
+* The red rises from 0 to 10 in ten steps, the green from
 * 0-5 in 5 steps, and the blue falls from 10 to 7 in three steps.
-* 
-* In the real program, the color percentages are converted to 
+*
+* In the real program, the color percentages are converted to
 * 0-255 values, and there are 1020 steps (255*4).
-* 
+*
 * To figure out how big a step there should be between one up- or
-* down-tick of one of the LED values, we call calculateStep(), 
-* which calculates the absolute gap between the start and end values, 
-* and then divides that gap by 1020 to determine the size of the step  
+* down-tick of one of the LED values, we call calculateStep(),
+* which calculates the absolute gap between the start and end values,
+* and then divides that gap by 1020 to determine the size of the step
 * between adjustments in the value.
 */
 int calculateStep(int prevValue, int endValue) {
     int step = endValue - prevValue; // What's the overall gap?
-    if (step) {                      // If its non-zero, 
+    if (step) {                      // If its non-zero,
         step = 1020/step;            //   divide by 1020
     }
-    
+
     return step;
 }
 
 /* The next function is calculateVal. When the loop value, i,
 *  reaches the step size appropriate for one of the
-*  colors, it increases or decreases the value of that color by 1. 
+*  colors, it increases or decreases the value of that color by 1.
 *  (R, G, and B are each calculated separately.)
 */
 int calculateVal(int step, int val, int i) {
@@ -404,7 +424,7 @@ int calculateVal(int step, int val, int i) {
             val -= 1;
         }
     }
-    
+
     // Defensive driving: make sure val stays in the range 0-255
     if (val > 255) {
         val = 255;
@@ -412,6 +432,6 @@ int calculateVal(int step, int val, int i) {
     else if (val < 0) {
         val = 0;
     }
-    
+
     return val;
 }
