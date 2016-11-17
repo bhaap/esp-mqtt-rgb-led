@@ -28,8 +28,8 @@ const char* mqtt_password = "{MQTT-PASSWORD}";
 const char* client_id = "ESPRGBWLED"; // Must be unique on the MQTT network
 
 // Topics
-const char* light_state_topic = "home/rgb1";
-const char* light_set_topic = "home/rgb1/set";
+const char* light_state_topic = "home/rgbw1";
+const char* light_set_topic = "home/rgbw1/set";
 
 const char* on_cmd = "ON";
 const char* off_cmd = "OFF";
